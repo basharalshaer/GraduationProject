@@ -40,3 +40,28 @@ public class AuthResponse
     public string Token { get; set; } = string.Empty;
     public AuthUserDto User { get; set; } = new();
 }
+
+public class EmailRequest
+{
+    [Required, EmailAddress]
+    public string Email { get; set; } = string.Empty;
+}
+
+public class VerifyOtpRequest
+{
+    [Required, EmailAddress]
+    public string Email { get; set; } = string.Empty;
+
+    [Required, RegularExpression(@"^\d{6}$", ErrorMessage = "The code must be 6 digits.")]
+    public string Code { get; set; } = string.Empty;
+}
+
+public class TokenPasswordRequest
+{
+    [Required]
+    public string Token { get; set; } = string.Empty;
+
+    [Required, RegularExpression(@"^(?=.*[A-Za-z])(?=.*\d).{8,100}$",
+        ErrorMessage = "Password must be 8+ characters with at least one letter and one number.")]
+    public string Password { get; set; } = string.Empty;
+}

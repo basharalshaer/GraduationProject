@@ -11,4 +11,6 @@ public class AuthToken
     public string TokenHash { get; set; } = string.Empty;   // never store the raw token
     public DateTime ExpiresAt { get; set; }
     public DateTime? UsedAt { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public int FailedAttempts { get; set; }
 }
