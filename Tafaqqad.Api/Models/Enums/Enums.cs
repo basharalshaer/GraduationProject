@@ -2,7 +2,7 @@
 
 public enum UserRole { Client, Office, Engineer, Admin }
 public enum UserStatus { Active, PendingActivation, Suspended }
-public enum TokenType { EmailVerify, SetPassword, ResetPassword }
+public enum TokenType { EmailVerify, SetPassword, ResetPassword, EmailOtp }
 public enum RequestStatus { Pending, InfoRequested, Approved, Rejected }
 public enum DocumentType { License, CommercialReg, Logo }
 public enum OfficeStatus { Incomplete, Active, Suspended }
