@@ -33,6 +33,7 @@ builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IAuthTokenService, AuthTokenService>();
 builder.Services.AddScoped<IOtpService, OtpService>();
 builder.Services.AddSingleton<IAppEmailSender, ConsoleEmailSender>();
+builder.Services.AddSingleton<IFileStorage, LocalFileStorage>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
