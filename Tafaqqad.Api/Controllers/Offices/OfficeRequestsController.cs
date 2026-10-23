@@ -5,6 +5,7 @@ using Tafaqqad.Api.Dtos;
 using Tafaqqad.Api.Models.Entities;
 using Tafaqqad.Api.Models.Enums;
 using Tafaqqad.Api.Services;
+using static Tafaqqad.Api.Dtos.SubmitOfficeRequestForm;
 
 namespace Tafaqqad.Api.Controllers.Offices;
 
@@ -114,6 +115,41 @@ public class OfficeRequestsController : ControllerBase
         });
     }
 
+    // POST api/office-requests/track  (public: reference number + email)
+    [HttpPost("track")]
+    public async Task<IActionResult> Track(TrackRequest req)
+    {
+        var email = req.Email.Trim().ToLowerInvariant();
+        var refNo = req.ReferenceNo.Trim().ToUpperInvariant();
+
+        var r = await _db.OfficeAccountRequests.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.ReferenceNo == refNo && x.Email == email);
+
+        // Same answer for "wrong number" and "wrong email", so nobody can probe for requests
+        if (r is null)
+            return NotFound(new { message = "No request found with this reference number and email." });
+
+        var message = r.Status switch
+        {
+            RequestStatus.Pending => "Your request is under review.",
+            RequestStatus.InfoRequested => r.AdminNotes ?? "We need more information. Please check your email.",
+            RequestStatus.Approved => "Your request was approved. Check your email for the activation link.",
+            RequestStatus.Rejected => r.AdminNotes ?? "Your request was not approved.",
+            _ => null
+        };
+
+        return Ok(new TrackResponse
+        {
+            ReferenceNo = r.ReferenceNo,
+            OfficeName = r.OfficeName,
+            Status = r.Status.ToString(),
+            SubmittedAt = r.CreatedAt,
+            ReviewedAt = r.ReviewedAt,
+            Message = message,
+            CanReapply = r.Status == RequestStatus.Rejected
+        });
+    }
+
     // Reference numbers look like REQ-2026-0001. The unique index protects against two requests
     // getting the same number at the same moment, so we simply try the next number.
     private async Task SaveWithReferenceNumberAsync(OfficeAccountRequest request)
@@ -165,4 +201,6 @@ public class OfficeRequestsController : ControllerBase
         };
         return matches ? null : "the file content does not match its type.";
     }
+
+
 }
