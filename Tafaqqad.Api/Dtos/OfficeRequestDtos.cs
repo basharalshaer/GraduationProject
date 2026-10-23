@@ -19,4 +19,24 @@ public class SubmitOfficeRequestForm
     [Required] public IFormFile LicenseFile { get; set; } = null!;
     [Required] public IFormFile CommercialRegFile { get; set; } = null!;
     public IFormFile? LogoFile { get; set; }
+
+    public class TrackRequest
+    {
+        [Required, MaxLength(30)]
+        public string ReferenceNo { get; set; } = string.Empty;
+
+        [Required, EmailAddress, MaxLength(256)]
+        public string Email { get; set; } = string.Empty;
+    }
+
+    public class TrackResponse
+    {
+        public string ReferenceNo { get; set; } = string.Empty;
+        public string OfficeName { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public DateTime SubmittedAt { get; set; }
+        public DateTime? ReviewedAt { get; set; }
+        public string? Message { get; set; }
+        public bool CanReapply { get; set; }
+    }
 }
