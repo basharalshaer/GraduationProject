@@ -5,6 +5,7 @@ using Tafaqqad.Api.Data;
 using Tafaqqad.Api.Dtos;
 using Tafaqqad.Api.Models.Enums;
 using Tafaqqad.Api.Services;
+using Tafaqqad.Api.Models.Entities;
 
 namespace Tafaqqad.Api.Controllers.Admin;
 
@@ -15,11 +16,41 @@ public class AdminOfficeRequestsController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly IFileStorage _files;
+    private readonly IAuthTokenService _tokens;
+    private readonly IAppEmailSender _email;
+    private readonly IConfiguration _config;
+    private readonly ILogger<AdminOfficeRequestsController> _log;
 
-    public AdminOfficeRequestsController(AppDbContext db, IFileStorage files)
+    public AdminOfficeRequestsController(AppDbContext db, IFileStorage files, IAuthTokenService tokens,
+        IAppEmailSender email, IConfiguration config, ILogger<AdminOfficeRequestsController> log)
     {
         _db = db;
         _files = files;
+        _tokens = tokens;
+        _email = email;
+        _config = config;
+        _log = log;
+    }
+
+    private Guid? CurrentUserId() =>
+        Guid.TryParse(User.FindFirst("sub")?.Value, out var id) ? id : null;
+
+    private string ActivationLink(string token) =>
+        $"{_config["App:FrontendBaseUrl"]!.TrimEnd('/')}/set-password?token={Uri.EscapeDataString(token)}";
+
+    private async Task<bool> TrySendActivationAsync(User user, string officeName, string rawToken)
+    {
+        try
+        {
+            await _email.SendAsync(user.Email, "تم قبول طلبك في تفقّد",
+                $"أهلاً {user.FullName}،{Environment.NewLine}تمت الموافقة على طلب {officeName}.{Environment.NewLine}عيّن كلمة المرور من الرابط التالي (صالح 48 ساعة):{Environment.NewLine}{ActivationLink(rawToken)}{Environment.NewLine}بعد الدخول، أكمل ملف مكتبك بإضافة المهندسين وقائمة الأسعار.");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Could not send the activation email to {Email}", user.Email);
+            return false;
+        }
     }
 
     // GET api/admin/office-requests?status=Pending&search=...&page=1&pageSize=20
@@ -157,5 +188,114 @@ public class AdminOfficeRequestsController : ControllerBase
 
         Response.Headers["X-Content-Type-Options"] = "nosniff";
         return PhysicalFile(path, contentType);       // shown in the browser, not forced as a download
+    }
+
+    // POST api/admin/office-requests/{id}/approve
+    [HttpPost("{id:guid}/approve")]
+    public async Task<IActionResult> Approve(Guid id, ApproveRequestBody body)
+    {
+        var adminId = CurrentUserId();
+        if (adminId is null) return Unauthorized();
+
+        var r = await _db.OfficeAccountRequests.Include(x => x.Documents).FirstOrDefaultAsync(x => x.Id == id);
+        if (r is null) return NotFound(new { message = "Request not found." });
+
+        if (r.Status != RequestStatus.Pending)
+            return Conflict(new { message = $"Only pending requests can be approved. This one is {r.Status}." });
+
+        // Re-check at approval time: things may have changed since the request was submitted
+        if (await _db.Users.AnyAsync(u => u.Email == r.Email))
+            return Conflict(new { message = "An account with this email already exists." });
+        if (await _db.Offices.AnyAsync(o => o.LicenseNo == r.LicenseNo))
+            return Conflict(new { message = "An office with this license number already exists." });
+        if (await _db.OfficeAccountRequests.AnyAsync(x => x.Id != r.Id
+                && (x.Email == r.Email || x.LicenseNo == r.LicenseNo) && x.Status != RequestStatus.Rejected))
+            return Conflict(new { message = "Another open request uses this email or license number." });
+
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            Role = UserRole.Office,
+            Email = r.Email,
+            FullName = r.ContactName,
+            Phone = r.Phone,
+            Status = UserStatus.PendingActivation,    // active after the office sets its password
+            PasswordHash = null
+        };
+
+        var office = new Office
+        {
+            Id = Guid.NewGuid(),
+            OwnerUserId = user.Id,
+            Name = r.OfficeName,
+            LicenseNo = r.LicenseNo,
+            City = r.City,
+            Phone = r.Phone,
+            Description = r.Description,
+            LogoUrl = r.Documents.FirstOrDefault(d => d.Type == DocumentType.Logo)?.FileUrl,
+            DailyCapacity = 0,                        // the office sets this itself
+            Status = OfficeStatus.Incomplete          // listed publicly only after it has engineers and prices
+        };
+
+        _db.Users.Add(user);
+        _db.Offices.Add(office);
+
+        var rawToken = await _tokens.CreateAsync(user, TokenType.SetPassword, TimeSpan.FromHours(48));
+
+        r.Status = RequestStatus.Approved;
+        r.ReviewedByUserId = adminId;
+        r.ReviewedAt = DateTime.UtcNow;
+        r.AdminNotes = string.IsNullOrWhiteSpace(body.Note) ? null : body.Note.Trim();
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            Id = Guid.NewGuid(),
+            ActorUserId = adminId.Value,
+            OfficeId = office.Id,
+            Action = "OfficeApproved",
+            NewValue = r.ReferenceNo
+        });
+
+        try
+        {
+            await _db.SaveChangesAsync();             // everything above is saved together, or not at all
+        }
+        catch (DbUpdateException)
+        {
+            return Conflict(new { message = "Could not approve: a duplicate email or license was created in the meantime." });
+        }
+
+        var emailSent = await TrySendActivationAsync(user, office.Name, rawToken);
+
+        return Ok(new
+        {
+            officeId = office.Id,
+            userId = user.Id,
+            emailSent,
+            message = emailSent
+                ? "Approved. An activation link was emailed to the office."
+                : "Approved, but the email could not be sent. Use resend-activation."
+        });
+    }
+
+    // POST api/admin/office-requests/{id}/resend-activation
+    [HttpPost("{id:guid}/resend-activation")]
+    public async Task<IActionResult> ResendActivation(Guid id)
+    {
+        var r = await _db.OfficeAccountRequests.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
+        if (r is null) return NotFound(new { message = "Request not found." });
+        if (r.Status != RequestStatus.Approved)
+            return Conflict(new { message = "Only approved requests have an activation link." });
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == r.Email && u.Role == UserRole.Office);
+        if (user is null) return NotFound(new { message = "The office account was not found." });
+        if (user.Status != UserStatus.PendingActivation)
+            return Conflict(new { message = "This account is already activated." });
+
+        var rawToken = await _tokens.CreateAsync(user, TokenType.SetPassword, TimeSpan.FromHours(48));
+        await _db.SaveChangesAsync();
+
+        var emailSent = await TrySendActivationAsync(user, r.OfficeName, rawToken);
+        return Ok(new { emailSent, message = emailSent ? "A new activation link was sent." : "The email could not be sent." });
     }
 }
