@@ -59,3 +59,9 @@ public class OfficeRequestDetails
     public AutoChecksDto AutoChecks { get; set; } = new();
     public bool CanApprove { get; set; }
 }
+
+public class ApproveRequestBody
+{
+    [System.ComponentModel.DataAnnotations.MaxLength(500)]
+    public string? Note { get; set; }
+}
