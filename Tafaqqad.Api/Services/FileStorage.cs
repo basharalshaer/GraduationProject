@@ -5,6 +5,7 @@ public interface IFileStorage
     /// Saves the file under Uploads/{folder} and returns a relative path like "office-requests/abc/xyz.pdf".
     Task<string> SaveAsync(IFormFile file, string folder);
     void DeleteFolder(string folder);
+    string? ResolvePath(string relativePath);
 }
 
 public class LocalFileStorage : IFileStorage
@@ -32,5 +33,16 @@ public class LocalFileStorage : IFileStorage
     {
         var dir = Path.Combine(_root, folder);
         if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+    }
+
+    // Returns the full path only if the file exists AND is inside the Uploads folder
+    // (blocks tricks like "../../appsettings.json").
+    public string? ResolvePath(string relativePath)
+    {
+        var full = Path.GetFullPath(Path.Combine(_root, relativePath));
+        var rootWithSeparator = Path.GetFullPath(_root) + Path.DirectorySeparatorChar;
+        return full.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase) && File.Exists(full)
+            ? full
+            : null;
     }
 }
