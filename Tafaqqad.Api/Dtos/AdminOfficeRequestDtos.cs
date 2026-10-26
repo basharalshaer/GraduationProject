@@ -65,3 +65,15 @@ public class ApproveRequestBody
     [System.ComponentModel.DataAnnotations.MaxLength(500)]
     public string? Note { get; set; }
 }
+
+public class ReasonBody
+{
+    [System.ComponentModel.DataAnnotations.Required, System.ComponentModel.DataAnnotations.MaxLength(500)]
+    public string Reason { get; set; } = string.Empty;
+}
+
+public class InfoRequestBody
+{
+    [System.ComponentModel.DataAnnotations.Required, System.ComponentModel.DataAnnotations.MaxLength(500)]
+    public string Message { get; set; } = string.Empty;
+}

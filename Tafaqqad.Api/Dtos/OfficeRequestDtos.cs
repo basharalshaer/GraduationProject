@@ -39,4 +39,16 @@ public class SubmitOfficeRequestForm
         public string? Message { get; set; }
         public bool CanReapply { get; set; }
     }
+
+    public class RespondToInfoForm
+    {
+        [Required, MaxLength(30)] public string ReferenceNo { get; set; } = string.Empty;
+        [Required, EmailAddress, MaxLength(256)] public string Email { get; set; } = string.Empty;
+        [MaxLength(1000)] public string? Description { get; set; }
+
+        // Send only what you want to replace
+        public IFormFile? LicenseFile { get; set; }
+        public IFormFile? CommercialRegFile { get; set; }
+        public IFormFile? LogoFile { get; set; }
+    }
 }

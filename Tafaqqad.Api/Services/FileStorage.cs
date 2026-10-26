@@ -6,6 +6,7 @@ public interface IFileStorage
     Task<string> SaveAsync(IFormFile file, string folder);
     void DeleteFolder(string folder);
     string? ResolvePath(string relativePath);
+    void DeleteFile(string relativePath);
 }
 
 public class LocalFileStorage : IFileStorage
@@ -44,5 +45,11 @@ public class LocalFileStorage : IFileStorage
         return full.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase) && File.Exists(full)
             ? full
             : null;
+    }
+
+    public void DeleteFile(string relativePath)
+    {
+        var path = ResolvePath(relativePath);
+        if (path is not null) File.Delete(path);
     }
 }
