@@ -298,4 +298,82 @@ public class AdminOfficeRequestsController : ControllerBase
         var emailSent = await TrySendActivationAsync(user, r.OfficeName, rawToken);
         return Ok(new { emailSent, message = emailSent ? "A new activation link was sent." : "The email could not be sent." });
     }
+
+    private async Task<bool> TrySendAsync(string to, string subject, string body)
+    {
+        try { await _email.SendAsync(to, subject, body); return true; }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Could not send email to {Email}", to);
+            return false;
+        }
+    }
+
+    // POST api/admin/office-requests/{id}/reject
+    [HttpPost("{id:guid}/reject")]
+    public async Task<IActionResult> Reject(Guid id, ReasonBody body)
+    {
+        var adminId = CurrentUserId();
+        if (adminId is null) return Unauthorized();
+
+        var r = await _db.OfficeAccountRequests.FirstOrDefaultAsync(x => x.Id == id);
+        if (r is null) return NotFound(new { message = "Request not found." });
+
+        if (r.Status != RequestStatus.Pending && r.Status != RequestStatus.InfoRequested)
+            return Conflict(new { message = $"Only pending or info-requested requests can be rejected. This one is {r.Status}." });
+
+        var reason = body.Reason.Trim();
+        r.Status = RequestStatus.Rejected;
+        r.ReviewedByUserId = adminId;
+        r.ReviewedAt = DateTime.UtcNow;
+        r.AdminNotes = reason;
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            Id = Guid.NewGuid(),
+            ActorUserId = adminId.Value,
+            Action = "OfficeRequestRejected",
+            NewValue = $"{r.ReferenceNo}: {reason}"
+        });
+        await _db.SaveChangesAsync();
+
+        var emailSent = await TrySendAsync(r.Email, "نتيجة طلبك في تفقّد",
+            $"أهلاً {r.ContactName}،{Environment.NewLine}نأسف، لم نتمكن من قبول طلب {r.OfficeName} (رقم الطلب {r.ReferenceNo}).{Environment.NewLine}السبب: {reason}{Environment.NewLine}يمكنك تقديم طلب جديد بعد معالجة السبب، مع إدخال رقم هذا الطلب ({r.ReferenceNo}) كطلب سابق.");
+
+        return Ok(new { emailSent, message = emailSent ? "Rejected. The applicant was emailed." : "Rejected, but the email could not be sent." });
+    }
+
+    // POST api/admin/office-requests/{id}/request-info
+    [HttpPost("{id:guid}/request-info")]
+    public async Task<IActionResult> RequestInfo(Guid id, InfoRequestBody body)
+    {
+        var adminId = CurrentUserId();
+        if (adminId is null) return Unauthorized();
+
+        var r = await _db.OfficeAccountRequests.FirstOrDefaultAsync(x => x.Id == id);
+        if (r is null) return NotFound(new { message = "Request not found." });
+
+        if (r.Status != RequestStatus.Pending)
+            return Conflict(new { message = $"Only pending requests can be sent back for information. This one is {r.Status}." });
+
+        var message = body.Message.Trim();
+        r.Status = RequestStatus.InfoRequested;
+        r.ReviewedByUserId = adminId;
+        r.ReviewedAt = DateTime.UtcNow;
+        r.AdminNotes = message;
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            Id = Guid.NewGuid(),
+            ActorUserId = adminId.Value,
+            Action = "OfficeRequestInfoRequested",
+            NewValue = $"{r.ReferenceNo}: {message}"
+        });
+        await _db.SaveChangesAsync();
+
+        var emailSent = await TrySendAsync(r.Email, "نحتاج معلومات إضافية لطلبك في تفقّد",
+            $"أهلاً {r.ContactName}،{Environment.NewLine}نحتاج المعلومات التالية لإكمال مراجعة طلب {r.OfficeName} (رقم الطلب {r.ReferenceNo}):{Environment.NewLine}{message}{Environment.NewLine}ادخل رقم الطلب والبريد في صفحة \"تتبّع طلبي\" لتحديث المستندات أو الوصف.");
+
+        return Ok(new { emailSent, message = emailSent ? "Information requested. The applicant was emailed." : "Status updated, but the email could not be sent." });
+    }
 }

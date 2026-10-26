@@ -150,6 +150,70 @@ public class OfficeRequestsController : ControllerBase
         });
     }
 
+    // POST api/office-requests/respond  (public: reference number + email)
+    [HttpPost("respond")]
+    [RequestSizeLimit(20_000_000)]
+    public async Task<IActionResult> Respond([FromForm] RespondToInfoForm form)
+    {
+        var email = form.Email.Trim().ToLowerInvariant();
+        var refNo = form.ReferenceNo.Trim().ToUpperInvariant();
+
+        var r = await _db.OfficeAccountRequests.Include(x => x.Documents)
+            .FirstOrDefaultAsync(x => x.ReferenceNo == refNo && x.Email == email);
+        if (r is null)
+            return NotFound(new { message = "No request found with this reference number and email." });
+
+        if (r.Status != RequestStatus.InfoRequested)
+            return Conflict(new { message = "This request is not waiting for more information." });
+
+        var uploads = new List<(IFormFile File, DocumentType Type, string Label)>();
+        if (form.LicenseFile is not null) uploads.Add((form.LicenseFile, DocumentType.License, "License file"));
+        if (form.CommercialRegFile is not null) uploads.Add((form.CommercialRegFile, DocumentType.CommercialReg, "Commercial registration file"));
+        if (form.LogoFile is not null) uploads.Add((form.LogoFile, DocumentType.Logo, "Logo"));
+
+        var newDescription = string.IsNullOrWhiteSpace(form.Description) ? null : form.Description.Trim();
+        if (uploads.Count == 0 && newDescription is null)
+            return BadRequest(new { message = "Send at least one updated file or an updated description." });
+
+        foreach (var (file, _, label) in uploads)
+        {
+            var error = await ValidateFileAsync(file);
+            if (error is not null) return BadRequest(new { message = $"{label}: {error}" });
+        }
+
+        var folder = $"office-requests/{r.Id:N}";
+        var saved = new List<string>();
+        var replaced = new List<string>();
+        try
+        {
+            foreach (var (file, type, _) in uploads)
+            {
+                foreach (var old in r.Documents.Where(d => d.Type == type).ToList())
+                {
+                    replaced.Add(old.FileUrl);
+                    _db.RequestDocuments.Remove(old);
+                }
+
+                var path = await _files.SaveAsync(file, folder);
+                saved.Add(path);
+                _db.RequestDocuments.Add(new RequestDocument { Id = Guid.NewGuid(), RequestId = r.Id, Type = type, FileUrl = path });
+            }
+
+            if (newDescription is not null) r.Description = newDescription;
+            r.Status = RequestStatus.Pending;           // back in the admin's queue
+            await _db.SaveChangesAsync();
+        }
+        catch
+        {
+            foreach (var p in saved) _files.DeleteFile(p);   // no orphan files if the save failed
+            throw;
+        }
+
+        foreach (var p in replaced) _files.DeleteFile(p);    // remove the replaced files
+
+        return Ok(new { message = "Thank you. Your request is back under review." });
+    }
+
     // Reference numbers look like REQ-2026-0001. The unique index protects against two requests
     // getting the same number at the same moment, so we simply try the next number.
     private async Task SaveWithReferenceNumberAsync(OfficeAccountRequest request)
