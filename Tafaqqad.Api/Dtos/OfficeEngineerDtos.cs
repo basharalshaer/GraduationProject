@@ -32,3 +32,12 @@ public class CreateEngineerResponse
     public bool EmailSent { get; set; }
     public string Message { get; set; } = string.Empty;
 }
+
+public class UpdateEngineerRequest
+{
+    [Required, MaxLength(150)] public string FullName { get; set; } = string.Empty;
+    [Required, MaxLength(30)] public string Phone { get; set; } = string.Empty;
+    [Required, MaxLength(80)] public string Specialty { get; set; } = string.Empty;
+    [Range(0, 60)] public int YearsExperience { get; set; }
+    [Required, MaxLength(30)] public string SyndicateNo { get; set; } = string.Empty;
+}

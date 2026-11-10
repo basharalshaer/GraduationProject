@@ -96,6 +96,116 @@ public class OfficeEngineersController : OfficeApiController
         });
     }
 
+    // GET api/office/engineers
+    [HttpGet]
+    public async Task<IActionResult> List()
+    {
+        var office = await GetMyOfficeAsync(track: false);
+        if (office is null) return NotFound(new { message = "No office is linked to this account." });
+
+        var list = await Db.Engineers.AsNoTracking().Include(e => e.User)
+            .Where(e => e.OfficeId == office.Id)
+            .ToListAsync();
+
+        return Ok(list
+            .OrderBy(e => e.Status == EngineerStatus.Active ? 0 : 1)
+            .ThenBy(e => e.User.FullName)
+            .Select(e => ToDto(e, e.User)));
+    }
+
+    // PUT api/office/engineers/{id}
+    [HttpPut("{id:guid}")]
+    public async Task<IActionResult> Update(Guid id, UpdateEngineerRequest req)
+    {
+        var (office, engineer, error) = await LoadMineAsync(id);
+        if (error is not null) return error;
+
+        var syndicateNo = req.SyndicateNo.Trim();
+        if (await Db.Engineers.AnyAsync(e => e.OfficeId == office!.Id && e.Id != id && e.SyndicateNo == syndicateNo))
+            return Conflict(new { message = "Another engineer in your office has this syndicate number." });
+
+        engineer!.User.FullName = req.FullName.Trim();
+        engineer.User.Phone = req.Phone.Trim();
+        engineer.Specialty = req.Specialty.Trim();
+        engineer.YearsExperience = req.YearsExperience;
+        engineer.SyndicateNo = syndicateNo;
+
+        await Db.SaveChangesAsync();
+        return Ok(ToDto(engineer, engineer.User));
+    }
+
+    // POST api/office/engineers/{id}/deactivate
+    [HttpPost("{id:guid}/deactivate")]
+    public async Task<IActionResult> Deactivate(Guid id)
+    {
+        var (office, engineer, error) = await LoadMineAsync(id);
+        if (error is not null) return error;
+        if (engineer!.Status == EngineerStatus.Deactivated)
+            return Conflict(new { message = "This engineer is already deactivated." });
+
+        engineer.Status = EngineerStatus.Deactivated;
+        engineer.User.Status = UserStatus.Suspended;          // blocks login
+        Log(office!.Id, "EngineerDeactivated", engineer.User.FullName);
+
+        await Db.SaveChangesAsync();
+        return Ok(ToDto(engineer, engineer.User));
+    }
+
+    // POST api/office/engineers/{id}/reactivate
+    [HttpPost("{id:guid}/reactivate")]
+    public async Task<IActionResult> Reactivate(Guid id)
+    {
+        var (office, engineer, error) = await LoadMineAsync(id);
+        if (error is not null) return error;
+        if (engineer!.Status == EngineerStatus.Active)
+            return Conflict(new { message = "This engineer is already active." });
+
+        engineer.Status = EngineerStatus.Active;
+        // If they never set a password, they go back to "waiting for activation"
+        engineer.User.Status = string.IsNullOrEmpty(engineer.User.PasswordHash) ? UserStatus.PendingActivation : UserStatus.Active;
+        Log(office!.Id, "EngineerReactivated", engineer.User.FullName);
+
+        await Db.SaveChangesAsync();
+        return Ok(ToDto(engineer, engineer.User));
+    }
+
+    // POST api/office/engineers/{id}/resend-activation
+    [HttpPost("{id:guid}/resend-activation")]
+    public async Task<IActionResult> ResendActivation(Guid id)
+    {
+        var (office, engineer, error) = await LoadMineAsync(id);
+        if (error is not null) return error;
+        if (engineer!.Status != EngineerStatus.Active)
+            return Conflict(new { message = "Reactivate the engineer first." });
+        if (engineer.User.Status != UserStatus.PendingActivation)
+            return Conflict(new { message = "This engineer has already activated their account." });
+
+        // A new token cancels the old one (see AuthTokenService)
+        var rawToken = await _tokens.CreateAsync(engineer.User, TokenType.SetPassword, ActivationLifetime);
+        await Db.SaveChangesAsync();
+
+        var sent = await SendActivationAsync(engineer.User, office!.Name, rawToken);
+        return Ok(new { emailSent = sent, message = sent ? "A new activation link was sent." : "The email could not be sent. Try again later." });
+    }
+
+    // Finds an engineer that belongs to the logged-in office; 404 for anyone else's engineer
+    private async Task<(Office? office, Engineer? engineer, IActionResult? error)> LoadMineAsync(Guid id)
+    {
+        var office = await GetMyOfficeAsync();
+        if (office is null) return (null, null, NotFound(new { message = "No office is linked to this account." }));
+        if (office.Status == OfficeStatus.Suspended)
+            return (office, null, StatusCode(StatusCodes.Status403Forbidden, new { message = "This office is suspended. Please contact support." }));
+
+        var engineer = await Db.Engineers.Include(e => e.User)
+            .FirstOrDefaultAsync(e => e.Id == id && e.OfficeId == office.Id);
+        if (engineer is null) return (office, null, NotFound(new { message = "Engineer not found." }));
+
+        return (office, engineer, null);
+    }
+
+    private void Log(Guid officeId, string action, string value) =>
+        Db.AuditLogs.Add(new AuditLog { Id = Guid.NewGuid(), ActorUserId = CurrentUserId!.Value, OfficeId = officeId, Action = action, NewValue = value, CreatedAt = DateTime.UtcNow });
+
     private async Task<bool> SendActivationAsync(User user, string officeName, string rawToken)
     {
         var link = $"{_config["App:FrontendBaseUrl"]!.TrimEnd('/')}/set-password?token={Uri.EscapeDataString(rawToken)}";
