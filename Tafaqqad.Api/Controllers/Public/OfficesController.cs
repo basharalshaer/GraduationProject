@@ -105,6 +105,83 @@ public class OfficesController : ControllerBase
         });
     }
 
+    // GET api/offices/compare?ids=guid1,guid2,guid3
+    [HttpGet("compare")]
+    public async Task<IActionResult> Compare([FromQuery] string? ids)
+    {
+        if (string.IsNullOrWhiteSpace(ids))
+            return BadRequest(new { message = "Send 2 to 4 office ids, separated by commas." });
+
+        var requested = new List<Guid>();
+        foreach (var part in ids.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (!Guid.TryParse(part, out var g))
+                return BadRequest(new { message = $"'{part}' is not a valid office id." });
+            if (!requested.Contains(g)) requested.Add(g);   // remove duplicates, keep order
+        }
+
+        if (requested.Count < 2 || requested.Count > 4)
+            return BadRequest(new { message = "You can compare 2 to 4 different offices." });
+
+        var offices = await _db.Offices.AsNoTracking()
+            .Include(o => o.Prices)
+            .Include(o => o.WorkingHours)
+            .AsSplitQuery()
+            .Where(o => requested.Contains(o.Id) && o.Status == OfficeStatus.Active)
+            .ToListAsync();
+
+        var foundIds = offices.Select(o => o.Id).ToList();
+
+        var engineerCounts = await _db.Engineers
+            .Where(e => foundIds.Contains(e.OfficeId)
+                && e.Status == EngineerStatus.Active && e.User.Status == UserStatus.Active)
+            .GroupBy(e => e.OfficeId)
+            .Select(g => new { OfficeId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.OfficeId, x => x.Count);
+
+        var memberSince = await _db.AuditLogs
+            .Where(a => a.OfficeId != null && foundIds.Contains(a.OfficeId.Value) && a.Action == "OfficeActivated")
+            .GroupBy(a => a.OfficeId!.Value)
+            .Select(g => new { OfficeId = g.Key, At = g.Max(a => a.CreatedAt) })
+            .ToDictionaryAsync(x => x.OfficeId, x => x.At);
+
+        var propertyTypes = offices
+            .SelectMany(o => o.Prices.Select(p => p.PropertyType))
+            .Distinct()
+            .OrderBy(t => t)
+            .Select(t => t.ToString())
+            .ToList();
+
+        var byId = offices.ToDictionary(o => o.Id);
+
+        return Ok(new CompareOfficesResponse
+        {
+            PropertyTypes = propertyTypes,
+            MissingIds = requested.Where(id => !byId.ContainsKey(id)).ToList(),
+            Offices = requested.Where(byId.ContainsKey).Select(id =>
+            {
+                var o = byId[id];
+                return new CompareOfficeDto
+                {
+                    Id = o.Id,
+                    Name = o.Name,
+                    City = o.City,
+                    LogoUrl = PublicLogoUrl(o.Id, o.LogoUrl),
+                    RatingAvg = o.RatingAvg,
+                    RatingCount = o.RatingCount,
+                    EngineerCount = engineerCounts.GetValueOrDefault(o.Id),
+                    DailyCapacity = o.DailyCapacity,
+                    OpenDays = o.WorkingHours.Count(h => !h.IsClosed),
+                    StartingPrice = o.Prices.Count == 0 ? null : o.Prices.Min(p => p.Price),
+                    MemberSince = memberSince.TryGetValue(o.Id, out var at) ? at : null,
+                    CheapestByType = o.Prices
+                        .GroupBy(p => p.PropertyType)
+                        .ToDictionary(g => g.Key.ToString(), g => g.Min(p => p.Price))
+                };
+            }).ToList()
+        });
+    }
+
     // GET api/offices/{id}
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Details(Guid id)

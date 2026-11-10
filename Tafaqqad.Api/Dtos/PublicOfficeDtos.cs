@@ -57,3 +57,26 @@ public class PublicOfficeDetailsDto
     public List<PublicOfficePriceDto> Prices { get; set; } = new();
     public List<PublicWorkingHourDto> WorkingHours { get; set; } = new();
 }
+
+public class CompareOfficeDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string City { get; set; } = string.Empty;
+    public string? LogoUrl { get; set; }
+    public decimal RatingAvg { get; set; }
+    public int RatingCount { get; set; }
+    public int EngineerCount { get; set; }
+    public int DailyCapacity { get; set; }
+    public int OpenDays { get; set; }
+    public decimal? StartingPrice { get; set; }
+    public DateTime? MemberSince { get; set; }
+    public Dictionary<string, decimal> CheapestByType { get; set; } = new();   // "Apartment": 60, "Villa": 120
+}
+
+public class CompareOfficesResponse
+{
+    public List<string> PropertyTypes { get; set; } = new();   // the rows of the price table
+    public List<CompareOfficeDto> Offices { get; set; } = new();
+    public List<Guid> MissingIds { get; set; } = new();        // not found or not Active
+}
