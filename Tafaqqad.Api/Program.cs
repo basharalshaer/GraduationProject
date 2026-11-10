@@ -10,14 +10,39 @@ using Microsoft.AspNetCore.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ---- Fail fast if required settings are missing or unsafe ----
+var config = builder.Configuration;
+var configProblems = new List<string>();
+
+var jwtKey = config["Jwt:Key"];
+if (string.IsNullOrWhiteSpace(jwtKey) || jwtKey.Length < 32)
+    configProblems.Add("Jwt:Key is missing or shorter than 32 characters.");
+if (string.IsNullOrWhiteSpace(config["Jwt:Issuer"]))
+    configProblems.Add("Jwt:Issuer is missing.");
+if (string.IsNullOrWhiteSpace(config["Jwt:Audience"]))
+    configProblems.Add("Jwt:Audience is missing.");
+if (string.IsNullOrWhiteSpace(config.GetConnectionString("Default")))
+    configProblems.Add("ConnectionStrings:Default is missing.");
+if (!Uri.TryCreate(config["App:FrontendBaseUrl"], UriKind.Absolute, out _))
+    configProblems.Add("App:FrontendBaseUrl is missing or not a full URL (e.g. http://localhost:5173).");
+
+var allowedOrigins = config.GetSection("Cors:Origins").Get<string[]>() ?? Array.Empty<string>();
+if (allowedOrigins.Length == 0)
+    configProblems.Add("Cors:Origins is empty.");
+
+if (configProblems.Count > 0)
+    throw new InvalidOperationException(
+        "Tafaqqad cannot start because of configuration problems:\n - " + string.Join("\n - ", configProblems));
+
 builder.Services.AddControllers();
 
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("Frontend", policy => policy
-        .WithOrigins(builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? Array.Empty<string>())
+        .WithOrigins(allowedOrigins)
         .AllowAnyHeader()
-        .AllowAnyMethod());
+        .AllowAnyMethod()
+        .WithExposedHeaders("Retry-After"));
 });
 
 builder.Services.AddEndpointsApiExplorer();
@@ -35,6 +60,10 @@ builder.Services.AddSwaggerGen(options =>
     {
         [new OpenApiSecuritySchemeReference("Bearer", document)] = new List<string>()
     });
+
+    // H4: show the /// comments from the code in Swagger
+    var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, xmlFile));
 });
 
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -153,6 +182,26 @@ app.UseStatusCodePages(async statusContext =>
     });
 });
 
+// Security headers on every response (added just before the response is sent,
+// so they survive the error handler too)
+app.Use(async (context, next) =>
+{
+    context.Response.OnStarting(() =>
+    {
+        var headers = context.Response.Headers;
+        headers["X-Content-Type-Options"] = "nosniff";
+        headers["X-Frame-Options"] = "DENY";
+        headers["Referrer-Policy"] = "no-referrer";
+
+        // Strict CSP only for JSON - Swagger's HTML page and images are left alone
+        if (context.Response.ContentType?.StartsWith("application/json") == true)
+            headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'";
+
+        return Task.CompletedTask;
+    });
+    await next();
+});
+
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -164,6 +213,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+if (!app.Environment.IsDevelopment())
+    app.UseHsts();
 
 app.UseHttpsRedirection();
 app.UseCors("Frontend");

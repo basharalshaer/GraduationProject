@@ -25,7 +25,15 @@ public class OfficesController : ControllerBase
     private static string? PublicLogoUrl(Guid officeId, string? storedPath) =>
         string.IsNullOrEmpty(storedPath) ? null : $"/api/offices/{officeId}/logo";
 
-    // GET api/offices?city=&propertyType=&maxPrice=&minRating=&search=&sort=rating|price|newest&page=1&pageSize=12
+    /// <summary>Lists Active offices for clients, with filters, sorting and paging.</summary>
+    /// <param name="city">Exact city name.</param>
+    /// <param name="propertyType">Apartment, Villa, Commercial or Land. Only offices that price this type are returned.</param>
+    /// <param name="maxPrice">Maximum starting price.</param>
+    /// <param name="minRating">Minimum average rating (0–5).</param>
+    /// <param name="search">Part of the office name.</param>
+    /// <param name="sort">rating (default), price or newest.</param>
+    /// <param name="page">Page number, starting at 1.</param>
+    /// <param name="pageSize">Items per page (1–50).</param>
     [HttpGet]
     public async Task<IActionResult> List(
         [FromQuery] string? city, [FromQuery] string? propertyType, [FromQuery] decimal? maxPrice,
@@ -105,7 +113,8 @@ public class OfficesController : ControllerBase
         });
     }
 
-    // GET api/offices/compare?ids=guid1,guid2,guid3
+    /// <summary>Compares 2 to 4 Active offices side by side.</summary>
+    /// <param name="ids">Office ids separated by commas. Unavailable offices are returned in missingIds.</param>
     [HttpGet("compare")]
     public async Task<IActionResult> Compare([FromQuery] string? ids)
     {
@@ -182,7 +191,8 @@ public class OfficesController : ControllerBase
         });
     }
 
-    // GET api/offices/{id}
+    /// <summary>Full public details of an Active office. Returns 404 for offices that aren't Active.</summary>
+    /// <param name="id">The office id.</param>
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Details(Guid id)
     {
@@ -236,7 +246,8 @@ public class OfficesController : ControllerBase
         });
     }
 
-    // GET api/offices/{id}/logo
+    /// <summary>The office logo image (PNG or JPG). Returns 404 if there's no logo or the office isn't Active.</summary>
+    /// <param name="id">The office id.</param>
     [HttpGet("{id:guid}/logo")]
     public async Task<IActionResult> Logo(Guid id)
     {

@@ -195,11 +195,6 @@ public class AuthController : ControllerBase
         });
     }
 
-    // TEMPORARY: only to test role protection. Delete it when we build the real admin endpoints.
-    [Authorize(Roles = "Admin")]
-    [HttpGet("admin-ping")]
-    public IActionResult AdminPing() => Ok(new { message = "You are an admin." });
-
     // POST api/auth/set-password  (office and engineer activation link)
     [HttpPost("set-password")]
     [EnableRateLimiting("login")]
