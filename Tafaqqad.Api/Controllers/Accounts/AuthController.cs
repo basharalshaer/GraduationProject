@@ -213,6 +213,14 @@ public class AuthController : ControllerBase
         t.UsedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
+        // An engineer finishing activation can complete their office
+        if (user.Role == UserRole.Engineer)
+        {
+            var office = await _db.Engineers.Where(e => e.UserId == user.Id).Select(e => e.Office).FirstOrDefaultAsync();
+            if (office is not null)
+                await HttpContext.RequestServices.GetRequiredService<OfficeStatusService>().RefreshAsync(office, user.Id);
+        }
+
         return Ok(new { message = "Password saved. You can log in now." });
     }
 

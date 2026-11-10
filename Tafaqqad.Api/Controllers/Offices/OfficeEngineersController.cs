@@ -82,6 +82,7 @@ public class OfficeEngineersController : OfficeApiController
 
         // User + Engineer + token + audit row: one SaveChanges, so all or nothing
         await Db.SaveChangesAsync();
+        await RefreshOfficeStatusAsync(office);
 
         // Email AFTER the save; if it fails, the office can use "resend" (6e)
         var emailSent = await SendActivationAsync(user, office.Name, rawToken);
@@ -148,6 +149,7 @@ public class OfficeEngineersController : OfficeApiController
         Log(office!.Id, "EngineerDeactivated", engineer.User.FullName);
 
         await Db.SaveChangesAsync();
+        await RefreshOfficeStatusAsync(office!);
         return Ok(ToDto(engineer, engineer.User));
     }
 
@@ -166,6 +168,7 @@ public class OfficeEngineersController : OfficeApiController
         Log(office!.Id, "EngineerReactivated", engineer.User.FullName);
 
         await Db.SaveChangesAsync();
+        await RefreshOfficeStatusAsync(office!);
         return Ok(ToDto(engineer, engineer.User));
     }
 
