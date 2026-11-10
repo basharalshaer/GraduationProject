@@ -91,6 +91,7 @@ public class OfficeScheduleController : OfficeApiController
         }
 
         await Db.SaveChangesAsync();
+        await RefreshOfficeStatusAsync(office);
         return Ok(await LoadAsync(office));
     }
 

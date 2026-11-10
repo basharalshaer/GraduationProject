@@ -72,7 +72,8 @@ public class OfficePricesController : OfficeApiController
             Log(actor, office.Id, "PriceRemoved", Describe(row.PropertyType, row.SizeBand, row.Price), null);
         }
 
-        await Db.SaveChangesAsync();
+        await Db.SaveChangesAsync(); 
+        await RefreshOfficeStatusAsync(office);
         return Ok(await LoadAsync(office.Id));
     }
 

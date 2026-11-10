@@ -41,6 +41,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IAuthTokenService, AuthTokenService>();
 builder.Services.AddScoped<IOtpService, OtpService>();
+builder.Services.AddScoped<OfficeStatusService>();
 builder.Services.AddSingleton<IAppEmailSender, ConsoleEmailSender>();
 builder.Services.AddSingleton<IFileStorage, LocalFileStorage>();
 

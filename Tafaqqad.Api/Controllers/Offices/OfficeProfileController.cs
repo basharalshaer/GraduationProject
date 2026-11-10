@@ -59,37 +59,18 @@ public class OfficeProfileController : OfficeApiController
         return Ok(await BuildProfileAsync(office));
     }
 
-    private async Task<OfficeProfileDto> BuildProfileAsync(Office office)
+    private async Task<OfficeProfileDto> BuildProfileAsync(Office office) => new()
     {
-        var activeEngineers = await Db.Engineers
-            .CountAsync(e => e.OfficeId == office.Id && e.Status == EngineerStatus.Active);
-        var priceCount = await Db.OfficePrices.CountAsync(p => p.OfficeId == office.Id);
-
-        var missing = new List<string>();
-        if (activeEngineers == 0) missing.Add("ENGINEER");
-        if (priceCount == 0) missing.Add("PRICE");
-        if (office.DailyCapacity <= 0) missing.Add("CAPACITY");
-
-        return new OfficeProfileDto
-        {
-            Id = office.Id,
-            Name = office.Name,
-            LicenseNo = office.LicenseNo,
-            City = office.City,
-            Phone = office.Phone,
-            Description = office.Description,
-            Status = office.Status.ToString(),
-            DailyCapacity = office.DailyCapacity,
-            RatingAvg = office.RatingAvg,
-            RatingCount = office.RatingCount,
-            Completeness = new OfficeCompletenessDto
-            {
-                ActiveEngineers = activeEngineers,
-                PriceCount = priceCount,
-                DailyCapacity = office.DailyCapacity,
-                IsComplete = missing.Count == 0,
-                Missing = missing
-            }
-        };
-    }
+        Id = office.Id,
+        Name = office.Name,
+        LicenseNo = office.LicenseNo,
+        City = office.City,
+        Phone = office.Phone,
+        Description = office.Description,
+        Status = office.Status.ToString(),
+        DailyCapacity = office.DailyCapacity,
+        RatingAvg = office.RatingAvg,
+        RatingCount = office.RatingCount,
+        Completeness = await Status.GetCompletenessAsync(office)
+    };
 }

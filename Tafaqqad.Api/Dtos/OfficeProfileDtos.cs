@@ -9,6 +9,7 @@ public class OfficeCompletenessDto
     public int DailyCapacity { get; set; }
     public bool IsComplete { get; set; }
     public List<string> Missing { get; set; } = new();   // ENGINEER, PRICE, CAPACITY
+    public int OpenDays { get; set; }
 }
 
 public class OfficeProfileDto
