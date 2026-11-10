@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Tafaqqad.Api.Data;
 using Tafaqqad.Api.Dtos;
@@ -174,6 +175,7 @@ public class OfficeEngineersController : OfficeApiController
 
     // POST api/office/engineers/{id}/resend-activation
     [HttpPost("{id:guid}/resend-activation")]
+    [EnableRateLimiting("send-code")]
     public async Task<IActionResult> ResendActivation(Guid id)
     {
         var (office, engineer, error) = await LoadMineAsync(id);
