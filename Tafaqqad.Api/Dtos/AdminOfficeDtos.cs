@@ -66,3 +66,16 @@ public class SuspendOfficeRequest
     [Required, StringLength(500, MinimumLength = 5)]
     public string Reason { get; set; } = string.Empty;
 }
+
+public class AdminAuditLogItemDto
+{
+    public Guid Id { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public string Action { get; set; } = string.Empty;
+    public string? OldValue { get; set; }
+    public string? NewValue { get; set; }
+    public Guid? OfficeId { get; set; }
+    public string? OfficeName { get; set; }
+    public string? ActorEmail { get; set; }
+    public string? ActorRole { get; set; }
+}
