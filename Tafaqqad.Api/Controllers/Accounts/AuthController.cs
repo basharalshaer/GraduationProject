@@ -7,6 +7,7 @@ using Tafaqqad.Api.Dtos;
 using Tafaqqad.Api.Models.Entities;
 using Tafaqqad.Api.Models.Enums;
 using Tafaqqad.Api.Services;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Tafaqqad.Api.Controllers.Accounts;
 
@@ -50,6 +51,7 @@ public class AuthController : ControllerBase
 
     // POST api/auth/register  (clients only)
     [HttpPost("register")]
+    [EnableRateLimiting("send-code")]
     public async Task<IActionResult> Register(RegisterRequest req)
     {
         var email = req.Email.Trim().ToLowerInvariant();
@@ -89,6 +91,7 @@ public class AuthController : ControllerBase
 
     // POST api/auth/verify-otp  (client enters the 6-digit code)
     [HttpPost("verify-otp")]
+    [EnableRateLimiting("login")]
     public async Task<IActionResult> VerifyOtp(VerifyOtpRequest req)
     {
         var email = req.Email.Trim().ToLowerInvariant();
@@ -115,6 +118,7 @@ public class AuthController : ControllerBase
 
     // POST api/auth/resend-otp
     [HttpPost("resend-otp")]
+    [EnableRateLimiting("send-code")]
     public async Task<IActionResult> ResendOtp(EmailRequest req)
     {
         var email = req.Email.Trim().ToLowerInvariant();
@@ -137,6 +141,7 @@ public class AuthController : ControllerBase
 
     // POST api/auth/login  (all roles)
     [HttpPost("login")]
+    [EnableRateLimiting("login")]
     public async Task<IActionResult> Login(LoginRequest req)
     {
         var email = req.Email.Trim().ToLowerInvariant();
@@ -197,6 +202,7 @@ public class AuthController : ControllerBase
 
     // POST api/auth/set-password  (office and engineer activation link)
     [HttpPost("set-password")]
+    [EnableRateLimiting("login")]
     public async Task<IActionResult> SetPassword(TokenPasswordRequest req)
     {
         var t = await _tokens.ValidateAsync(req.Token, TokenType.SetPassword);
@@ -226,6 +232,7 @@ public class AuthController : ControllerBase
 
     // POST api/auth/forgot-password
     [HttpPost("forgot-password")]
+    [EnableRateLimiting("send-code")]
     public async Task<IActionResult> ForgotPassword(EmailRequest req)
     {
         var email = req.Email.Trim().ToLowerInvariant();
@@ -244,6 +251,7 @@ public class AuthController : ControllerBase
 
     // POST api/auth/reset-password
     [HttpPost("reset-password")]
+    [EnableRateLimiting("login")]
     public async Task<IActionResult> ResetPassword(TokenPasswordRequest req)
     {
         var t = await _tokens.ValidateAsync(req.Token, TokenType.ResetPassword);

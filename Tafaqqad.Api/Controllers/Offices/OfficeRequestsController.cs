@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Tafaqqad.Api.Data;
 using Tafaqqad.Api.Dtos;
@@ -30,6 +31,7 @@ public class OfficeRequestsController : ControllerBase
     // POST api/office-requests  (public: the office has no account yet)
     [HttpPost]
     [RequestSizeLimit(20_000_000)]
+    [EnableRateLimiting("public-form")]
     public async Task<IActionResult> Submit([FromForm] SubmitOfficeRequestForm form)
     {
         var email = form.Email.Trim().ToLowerInvariant();
@@ -117,6 +119,7 @@ public class OfficeRequestsController : ControllerBase
 
     // POST api/office-requests/track  (public: reference number + email)
     [HttpPost("track")]
+    [EnableRateLimiting("public-form")]
     public async Task<IActionResult> Track(TrackRequest req)
     {
         var email = req.Email.Trim().ToLowerInvariant();
@@ -153,6 +156,7 @@ public class OfficeRequestsController : ControllerBase
     // POST api/office-requests/respond  (public: reference number + email)
     [HttpPost("respond")]
     [RequestSizeLimit(20_000_000)]
+    [EnableRateLimiting("public-form")]
     public async Task<IActionResult> Respond([FromForm] RespondToInfoForm form)
     {
         var email = form.Email.Trim().ToLowerInvariant();
