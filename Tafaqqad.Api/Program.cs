@@ -60,6 +60,10 @@ builder.Services.AddSwaggerGen(options =>
     {
         [new OpenApiSecuritySchemeReference("Bearer", document)] = new List<string>()
     });
+
+    // H4: show the /// comments from the code in Swagger
+    var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, xmlFile));
 });
 
 builder.Services.AddDbContext<AppDbContext>(options =>
