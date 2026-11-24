@@ -112,7 +112,6 @@ public class ClientBookingsController : ClientApiController
 
             var taken = await Db.Bookings.CountAsync(b => b.OfficeId == office.Id && b.ScheduledDate == date
                 && b.Status != BookingStatus.Rejected && b.Status != BookingStatus.Cancelled);
-            await Task.Delay(TimeSpan.FromSeconds(8));   // TEMP: B1b race test - remove after testing
             if (taken >= office.DailyCapacity)
                 return Conflict(new { message = "The office is fully booked on this day. Choose another date.", code = "FULLY_BOOKED" });
 
