@@ -134,6 +134,16 @@ builder.Services.AddRateLimiter(options =>
             Window = TimeSpan.FromHours(1),
             QueueLimit = 0
         }));
+    // Creating bookings: per logged-in user (falls back to IP)
+    options.AddPolicy("create-booking", http =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            http.User.FindFirst("sub")?.Value ?? ClientIp(http),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromHours(1),
+                QueueLimit = 0
+            }));
 });
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
