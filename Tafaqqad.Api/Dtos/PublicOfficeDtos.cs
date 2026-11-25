@@ -28,6 +28,7 @@ public class PublicOfficeListResponse : PagedResult<PublicOfficeListItemDto>
 
 public class PublicOfficePriceDto
 {
+    public Guid Id { get; set; }                        // send as officePriceId when booking
     public string PropertyType { get; set; } = string.Empty;
     public string? SizeBand { get; set; }
     public decimal Price { get; set; }
