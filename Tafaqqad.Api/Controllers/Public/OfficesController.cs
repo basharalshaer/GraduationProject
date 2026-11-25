@@ -229,6 +229,7 @@ public class OfficesController : ControllerBase
                 .OrderBy(p => p.PropertyType).ThenBy(p => p.Price)
                 .Select(p => new PublicOfficePriceDto
                 {
+                    Id = p.Id,
                     PropertyType = p.PropertyType.ToString(),
                     SizeBand = string.IsNullOrEmpty(p.SizeBand) ? null : p.SizeBand,
                     Price = p.Price
