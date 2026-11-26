@@ -1,6 +1,6 @@
 @Tafaqqad.Api_HostAddress = http://localhost:5101
 
-GET {{Tafaqqad.Api_HostAddress}}/weatherforecast/
+GET {{Tafaqqad.Api_HostAddress}}/api/offices
 Accept: application/json
 
 ###
