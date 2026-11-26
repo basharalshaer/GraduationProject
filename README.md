@@ -190,9 +190,13 @@ The status switches between `Incomplete` and `Active` **automatically** after ev
 
 Every important change writes an `AuditLog` row in the **same database save** as the change: request approved or rejected, prices, capacity, engineers added or deactivated, the office going live, suspensions. The admin can search it, and it can't be edited or deleted.
 
+### Bookings
+
+A client can already **create** a booking request (see [Client bookings](#client-bookings--apiclientbookings-client)). It starts as `Requested`, saves a snapshot of the chosen price, writes the first status-history row and emails the office.
+
 ### Planned (Person B)
 
-Bookings, price approval and payment, the inspection report (5 weighted sections with photos, an AI-assisted summary), and reviews. The tables already exist; the endpoints are in progress.
+Listing and following bookings, price approval and payment, the inspection report (5 weighted sections with photos, an AI-assisted summary), and reviews. The tables already exist; the endpoints are in progress.
 
 ---
 
@@ -279,6 +283,49 @@ Only **Active** offices are returned. An Incomplete, Suspended or unknown office
 | GET | `/{id}/logo` | The logo image (PNG or JPG only) |
 | GET | `/compare?ids=id1,id2,...` | Compare 2–4 offices side by side; unavailable ones are listed in `missingIds` |
 
+### Client bookings – `api/client/bookings` (Client)
+
+| Method | Route | Purpose |
+|---|---|---|
+| POST | `/` | Create a booking request for an **Active** office |
+
+Body:
+
+```json
+{
+  "officeId": "…",
+  "officePriceId": "…",
+  "scheduledDate": "2026-11-30",
+  "property": {
+    "areaM2": 120, "floor": 2, "bedrooms": 3, "bathrooms": 2, "buildingAge": 5,
+    "hasElevator": true, "hasParking": false,
+    "address": "…", "lat": null, "lng": null
+  }
+}
+```
+
+- `officePriceId` comes from `prices` in `GET /api/offices/{id}`. The property type and the starting price are taken from that row, never from the client.
+- `areaM2` is 10–100000; `floor` -5–100; `bedrooms` and `bathrooms` 0–50; `buildingAge` 0–200 (these four are optional); `address` is 5–300 characters.
+- Send both `lat` and `lng`, or neither.
+- The date is from **tomorrow** (Jordan time) up to **60 days** ahead, on a day the office is open.
+- A client can have at most **5 open (unpaid) requests**, and only one per office per day.
+- An office takes at most its daily capacity per day. A database lock per office and day stops two clients from taking the last place.
+
+**201** returns `{ id, status, scheduledDate, initialPrice, officeName, propertyType, sizeBand, emailSent, message }`. An office that isn't Active gives **404**.
+
+| Status | `code` | Meaning |
+|---|---|---|
+| 400 | `PRICE_NOT_FOUND` | The price row doesn't belong to this office (any more) |
+| 400 | `LOCATION_INCOMPLETE` | Only one of `lat` / `lng` was sent |
+| 400 | `DATE_TOO_SOON` | Today or earlier |
+| 400 | `DATE_TOO_FAR` | More than 60 days ahead |
+| 400 | `OFFICE_CLOSED` | The office is closed on that weekday |
+| 403 | `ACCOUNT_NOT_ACTIVE` | The client account isn't active |
+| 409 | `TOO_MANY_OPEN_BOOKINGS` | Already 5 open requests |
+| 409 | `DUPLICATE_BOOKING` | Already an open request with this office on that day |
+| 409 | `FULLY_BOOKED` | The office has no place left that day |
+| 409 | `SLOT_BUSY` | Too many people are booking that day; try again |
+
 ---
 
 ## Errors, limits and security
@@ -313,6 +360,7 @@ Every error has a JSON body the frontend can read:
 | `login` | 10 per 5 minutes | login, verify OTP, set password, reset password |
 | `send-code` | 5 per 15 minutes | register, resend OTP, forgot password, resend engineer activation |
 | `public-form` | 5 per hour | office request form, respond, track |
+| `create-booking` | 10 per hour, **per logged-in user** | create a booking |
 | global | 300 per minute | everything |
 
 Counters are kept in memory; restarting the API resets them.
@@ -334,6 +382,7 @@ Counters are kept in memory; restarting the API resets them.
 Controllers/
   Accounts/AuthController.cs
   Admin/AdminOfficeRequestsController.cs, AdminOfficesController.cs, AdminAuditLogsController.cs
+  Clients/ClientApiController.cs (base), ClientBookingsController.cs
   Offices/OfficeApiController.cs (base), OfficeProfile/Prices/Schedule/Engineers/Dashboard controllers,
           OfficeRequestsController.cs
   Public/OfficesController.cs
